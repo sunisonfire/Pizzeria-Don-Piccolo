@@ -1,5 +1,5 @@
 # Pizzería Don Piccolo — Sistema de Gestión de Pedidos y Domicilios
-![Uploading image.png…]()
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/82cbd588-c45a-4eff-95d8-50dc538412d5" />
 
 ## Descripción del proyecto
 
