@@ -1,7 +1,10 @@
-USE `lapizzeria_don_piccolo`;
+USE thepizzeria_don_piccolo;
 
---Vista de resumen de pedidos por cliente (nombre del cliente, cantidad de pedidos, total gastado).
-CREATE VIEW `v_resumen_pedidos_cliente` AS
+-- ------------------------------------------------------------
+-- 1) v_resumen_pedidos_cliente
+-- Nombre del cliente, cantidad de pedidos, total gastado.
+-- ------------------------------------------------------------
+CREATE VIEW v_resumen_pedidos_cliente AS
 SELECT
   per.id_persona AS id_cliente,
   CONCAT(per.nombre, ' ', per.apellido) AS nombre_cliente,
@@ -12,8 +15,11 @@ JOIN cliente c ON per.id_persona = c.id_persona
 LEFT JOIN pedido pe ON c.id_persona = pe.id_cliente
 GROUP BY per.id_persona, nombre_cliente;
 
---Vista de desempeño de repartidores (número de entregas, tiempo promedio, zona).
-CREATE VIEW `v_desempeno_repartidores` AS
+-- ------------------------------------------------------------
+-- 2) v_desempeno_repartidores
+-- Número de entregas, tiempo promedio de entrega, zona.
+-- ------------------------------------------------------------
+CREATE VIEW v_desempeno_repartidores AS
 SELECT
   per.id_persona AS id_repartidor,
   CONCAT(per.nombre, ' ', per.apellido) AS nombre_repartidor,
@@ -26,8 +32,11 @@ JOIN zona z ON r.id_zona = z.id_zona
 LEFT JOIN domicilio d ON r.id_persona = d.id_repartidor AND d.hora_entrega IS NOT NULL
 GROUP BY per.id_persona, nombre_repartidor, zona;
 
---Vista de stock de ingredientes por debajo del mínimo permitido.
-CREATE VIEW `v_stock_bajo` AS
+-- ------------------------------------------------------------
+-- 3) v_stock_bajo
+-- Ingredientes con stock por debajo del mínimo permitido.
+-- ------------------------------------------------------------
+CREATE VIEW v_stock_bajo AS
 SELECT
   id_ingrediente,
   nombre,
@@ -36,7 +45,7 @@ SELECT
 FROM ingrediente
 WHERE stock_actual < stock_minimo;
 
---COMO PRUEBA
+--Usarlas con:
 SELECT * FROM v_resumen_pedidos_cliente;
 SELECT * FROM v_desempeno_repartidores;
 SELECT * FROM v_stock_bajo;
