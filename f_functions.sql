@@ -25,6 +25,7 @@ BEGIN
 END$$
 DELIMITER ;
 
+--Función para calcular la ganancia neta diaria (ventas - costos de ingredientes).
 DELIMITER $$
 CREATE FUNCTION f_ganancia_neta_diaria(p_fecha DATE)
 RETURNS DOUBLE
