@@ -62,3 +62,24 @@ BEGIN
   END IF;
 END$$
 DELIMITER ;
+
+DELIMITER $$
+
+CREATE TRIGGER t_verificar_stock_pizza
+BEFORE INSERT ON detallepedido
+FOR EACH ROW
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pizzaingrediente pi
+        JOIN ingrediente i
+            ON pi.id_ingrediente = i.id_ingrediente
+        WHERE pi.id_pizza = NEW.id_pizza
+          AND i.stock_actual < (pi.cantidad_necesaria * NEW.cantidad)
+    ) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'No hay suficiente stock para preparar esta pizza';
+    END IF;
+END$$
+
+DELIMITER ;
