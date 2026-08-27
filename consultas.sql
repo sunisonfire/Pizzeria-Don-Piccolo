@@ -1,7 +1,7 @@
+USE thepizzeria_don_piccolo;
 
-USE `lapizzeria_don_piccolo`;
 
---Clientes con pedidos entre dos fechas (BETWEEN).
+-- 1) Clientes con pedidos entre dos fechas (BETWEEN)
 SELECT
   per.id_persona AS id_cliente,
   CONCAT(per.nombre, ' ', per.apellido) AS nombre_cliente,
@@ -14,8 +14,8 @@ WHERE pe.fecha_hora BETWEEN '2026-08-01 00:00:00'
                         AND '2026-08-10 23:59:59'
 ORDER BY pe.fecha_hora;
 
+-- 2) Pizzas más vendidas (GROUP BY y COUNT)
 
---Pizzas más vendidas (GROUP BY y COUNT).
 SELECT
   p.id_pizza,
   p.nombre AS nombre_pizza,
@@ -26,8 +26,7 @@ JOIN detallepedido dp ON p.id_pizza = dp.id_pizza
 GROUP BY p.id_pizza, nombre_pizza
 ORDER BY unidades_vendidas DESC;
 
-
---Pedidos por repartidor (JOIN).
+-- 3) Pedidos por repartidor (JOIN)
 SELECT
   per.id_persona AS id_repartidor,
   CONCAT(per.nombre, ' ', per.apellido) AS nombre_repartidor,
@@ -38,8 +37,7 @@ JOIN domicilio d ON r.id_persona = d.id_repartidor
 GROUP BY per.id_persona, nombre_repartidor
 ORDER BY total_pedidos DESC;
 
-
---Promedio de entrega por zona (AVG y JOIN).
+-- 4) Promedio de entrega por zona (AVG y JOIN)
 SELECT
   z.id_zona,
   z.nombre AS zona,
@@ -50,7 +48,7 @@ WHERE d.hora_entrega IS NOT NULL
 GROUP BY z.id_zona, zona
 ORDER BY promedio_minutos_entrega;
 
---Clientes que gastaron más de un monto (HAVING).
+-- 5) Clientes que gastaron más de un monto (HAVING)
 SELECT
   per.id_persona AS id_cliente,
   CONCAT(per.nombre, ' ', per.apellido) AS nombre_cliente,
@@ -62,7 +60,7 @@ GROUP BY per.id_persona, nombre_cliente
 HAVING SUM(pe.total) > 30000
 ORDER BY total_gastado DESC;
 
---Búsqueda por coincidencia parcial de nombre de pizza (LIKE).
+-- 6) Búsqueda por coincidencia parcial de nombre de pizza (LIKE)
 SELECT
   id_pizza,
   nombre,
@@ -72,7 +70,7 @@ SELECT
 FROM pizza
 WHERE nombre LIKE '%pepperoni%';
 
---Subconsulta para obtener los clientes frecuentes (más de 5 pedidos mensuales).
+-- 7) Subconsulta: clientes frecuentes (más de 5 pedidos/mes)
 SELECT
   per.id_persona AS id_cliente,
   CONCAT(per.nombre, ' ', per.apellido) AS nombre_cliente
