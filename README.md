@@ -3,7 +3,7 @@
 
 ## Descripción del proyecto
 
-Pizzería Don Piccolo maneja actualmente sus pedidos de forma manual, lo que genera retrasos en la atención y errores en los registros de clientes y entregas. Este proyecto diseña una base de datos relacional en MySQL (`lapizzeria_don_piccolo`) que centraliza la gestión de clientes, pizzas, ingredientes, pedidos, repartidores, domicilios y pagos, e incorpora funciones, un procedimiento, triggers y vistas para automatizar y optimizar las operaciones y consultas del negocio.
+Pizzería Don Piccolo maneja actualmente sus pedidos de forma manual, lo que genera retrasos en la atención y errores en los registros de clientes y entregas. Este proyecto diseña una base de datos relacional en MySQL (`thepizzeria_don_piccolo`) que centraliza la gestión de clientes, pizzas, ingredientes, pedidos, repartidores, domicilios y pagos, e incorpora funciones, un procedimiento, triggers y vistas para automatizar y optimizar las operaciones y consultas del negocio.
 
 ## Tablas y relaciones
 
@@ -11,42 +11,45 @@ El modelo tiene 12 tablas:
 
 | Tabla | Descripción |
 |---|---|
-| `persona` | Tabla base con los datos comunes de cualquier persona del sistema (nombre, apellido, teléfono, dirección, correo). |
+| `persona` | Datos comunes de cualquier persona del sistema (nombre, apellido, teléfono, dirección, correo). |
 | `cliente` | Especialización de `persona`. `id_persona` es a la vez PK y FK hacia `persona`. |
-| `zona` | Catálogo de zonas de reparto (Centro, Norte, Sur, etc.). |
+| `zona` | Catálogo de zonas de reparto (Norte, Centro, Sur, etc.). |
 | `repartidor` | Especialización de `persona`. Tiene `id_zona` (FK a `zona`) y `estado` (`disponible` / `no_disponible`). |
-| `ingrediente` | Catálogo de ingredientes con `stock_actual`, `stock_minimo` y `costo_unitario`. |
 | `pizza` | Catálogo de pizzas: nombre, tamaño, precio base, tipo y disponibilidad. |
+| `ingrediente` | Catálogo de ingredientes, con `stock_actual`, `stock_minimo`, `costo_unitario` y `disponible`. |
 | `pizzaingrediente` | Tabla intermedia N:M entre `pizza` e `ingrediente`; define la receta de cada pizza. |
 | `pedido` | Pedido de un cliente: fecha, método de pago, estado, lugar (local/domicilio), subtotal y total. |
-| `detallepedido` | Detalle del pedido: qué pizzas y en qué cantidad (permite varias pizzas distintas por pedido). |
-| `domicilio` | Datos de entrega a domicilio de un pedido: repartidor, zona, hora de salida/entrega, distancia y costo de envío. |
+| `detallepedido` | Detalle del pedido: qué pizzas y en qué cantidad (permite varias pizzas por pedido). |
+| `domicilio` | Datos de entrega de un pedido: repartidor, zona, hora de salida/entrega, distancia y costo de envío. |
 | `pago` | Pago asociado a un pedido: método, monto, fecha y estado del pago. |
 | `historial_precios` | Auditoría de cambios de precio de las pizzas (alimentada por un trigger). |
 
 **Relaciones clave:**
 - `cliente` y `repartidor` heredan de `persona` mediante FK 1:1 sobre `id_persona`.
-- Un `pedido` tiene muchos registros en `detallepedido` (1:N), y cada uno apunta a una `pizza` — así un pedido puede incluir varias pizzas distintas.
+- Un `pedido` tiene muchos registros en `detallepedido` (1:N), y cada uno apunta a una `pizza`, así un pedido puede incluir varias pizzas distintas.
 - `pizza` e `ingrediente` se relacionan N:M a través de `pizzaingrediente`.
 - `domicilio` y `pago` tienen una relación 1:1 con `pedido` (FK única).
 - `repartidor` y `domicilio` se relacionan con `zona` para calcular métricas por zona.
 
 ## Objetos de base de datos
 
-### Funciones (prefijo `f_`)
-- `f_calcular_total_pedido(id_pedido)` — subtotal de pizzas + costo de envío + IVA (19%).
-- `f_ganancia_neta_diaria(fecha)` — ventas del día menos costo de ingredientes consumidos.
-- `f_es_cliente_frecuente(id_cliente, anio, mes)` — `TRUE` si el cliente hizo más de 5 pedidos ese mes.
+### Funciones (`funciones.sql`)
+- `f_calcular_total_pedido(id_pedido)` → `DOUBLE`. Suma el subtotal de las pizzas del pedido más el costo de envío (si tiene domicilio) y le aplica el 19% de IVA.
+- `f_ganancia_neta_diaria(fecha)` → `DOUBLE`. Ventas del día (pedidos `entregado`) menos el costo de los ingredientes consumidos ese día.
+- `f_es_cliente_frecuente(id_cliente, anio, mes)` → `VARCHAR(20)`. Devuelve `'CLIENTE FRECUENTE'` si el cliente hizo más de 5 pedidos ese mes, `'CLIENTE'` si hizo entre 1 y 5, o `'SIN PEDIDOS ESTE MES'` si no hizo ninguno.
 
-### Procedimiento (prefijo `p_`)
-- `sp_registrar_entrega(id_domicilio, hora_entrega)` — registra la hora de entrega y pasa el pedido a estado `entregado`.
+### Procedimiento (incluido en `funciones.sql`)
+- `p_registrar_entrega(id_domicilio, hora_entrega)` — registra la hora de entrega del domicilio y cambia automáticamente el estado del pedido asociado a `entregado`.
 
-### Triggers (prefijo `t_`)
+Adicionalmente, `mejoras_registro_pedido.sql` agrega `p_registrar_pedido_completo`, un procedimiento opcional que crea un pedido junto con su detalle, valida stock de ingredientes disponible antes de insertar y genera el pago pendiente, todo dentro de una transacción.
+
+### Triggers (`triggers.sql`)
 - `t_actualizar_stock_ingrediente` — descuenta stock de ingredientes al insertar una línea en `detallepedido`.
 - `t_auditoria_precio_pizza` — guarda en `historial_precios` cada cambio de `precio_base` en `pizza`.
 - `t_repartidor_disponible` — libera al repartidor (`disponible`) cuando se registra la hora de entrega de un domicilio.
+- `t_disponibilidad_ingrediente_insert` / `t_disponibilidad_ingrediente_update` — mantienen el campo `disponible` de `ingrediente` sincronizado con el stock: si `stock_actual <= 0` el ingrediente pasa a no disponible automáticamente, tanto al insertarlo como al actualizarlo (incluye las bajas de stock del trigger anterior).
 
-### Vistas (prefijo `v_`)
+### Vistas (`vistas.sql`)
 - `v_resumen_pedidos_cliente` — cliente, cantidad de pedidos y total gastado.
 - `v_desempeno_repartidores` — repartidor, zona, número de entregas y tiempo promedio de entrega.
 - `v_stock_bajo` — ingredientes con stock por debajo del mínimo permitido.
@@ -70,34 +73,36 @@ FROM pedido GROUP BY id_cliente HAVING SUM(total) > 30000;
 SELECT f_calcular_total_pedido(1);
 
 -- Usando el procedimiento
-CALL sp_registrar_entrega(1, '2026-08-25 14:30:00');
+CALL p_registrar_entrega(1, '2026-08-25 14:30:00');
 
 -- Usando una vista
 SELECT * FROM v_stock_bajo;
 ```
 
-El set completo de las 7 consultas requeridas (BETWEEN, GROUP BY/COUNT, JOIN, AVG, HAVING, LIKE y subconsulta) está en `lapizzeria_don_piccolo_consultas.sql`.
+El set completo de las 7 consultas requeridas (BETWEEN, GROUP BY/COUNT, JOIN, AVG, HAVING, LIKE y subconsulta) está en `consultas.sql`.
 
 ## Instrucciones para ejecutar el script
 
-Ejecutar los archivos **en este orden** desde un cliente MySQL (Workbench, línea de comandos, DBeaver, etc.):
+Ejecutar los archivos **en este orden** desde un cliente MySQL:
 
-1. `lapizzeria_don_piccolo.sql` — crea la base de datos y las 12 tablas.
-2. `lapizzeria_don_piccolo_inserts.sql` — carga datos de ejemplo en todas las tablas.
-3. `lapizzeria_don_piccolo_functions.sql` — crea las funciones.
-4. `lapizzeria_don_piccolo_procedures.sql` — crea el procedimiento.
-5. `lapizzeria_don_piccolo_triggers.sql` — crea los triggers.
-6. `lapizzeria_don_piccolo_views.sql` — crea las vistas.
-7. `lapizzeria_don_piccolo_consultas.sql` — (opcional) ejecuta las consultas de ejemplo.
+1. `database.sql` — crea la base de datos y las 12 tablas.
+2. `funciones.sql` — crea las funciones y el procedimiento `p_registrar_entrega`.
+3. `triggers.sql` — crea los triggers (deben existir antes de insertar datos, porque descuentan stock).
+4. `vistas.sql` — crea las vistas.
+5. `datos_prueba.sql` — carga datos de ejemplo consistentes entre sí (clientes, pizzas, ingredientes, pedidos, domicilios y pagos con subtotales y totales ya calculados).
+6. `consultas.sql` — ejecuta las consultas de ejemplo.
+7. `mejoras_registro_pedido.sql` — (opcional) agrega el procedimiento `p_registrar_pedido_completo`.
 
-Por línea de comandos:
-```bash
-mysql -u tu_usuario -p < lapizzeria_don_piccolo.sql
-mysql -u tu_usuario -p < lapizzeria_don_piccolo_inserts.sql
-mysql -u tu_usuario -p < lapizzeria_don_piccolo_functions.sql
-mysql -u tu_usuario -p < lapizzeria_don_piccolo_procedures.sql
-mysql -u tu_usuario -p < lapizzeria_don_piccolo_triggers.sql
-mysql -u tu_usuario -p < lapizzeria_don_piccolo_views.sql
+
+## Estructura del proyecto
+
 ```
-
-**Nota:** si tu cliente MySQL no maneja bien el cambio de `DELIMITER` (por ejemplo, algunos conectores), ejecuta los archivos de funciones, procedimiento y triggers directamente desde MySQL Workbench o la consola `mysql`, donde `DELIMITER` sí se interpreta correctamente.
+/pizzeria-don-piccolo/
+ ├── database.sql
+ ├── f_funciones.sql
+ ├── t_triggers.sql
+ ├── v_views.sql
+ ├── consultas.sql
+ ├── mejoras_registro_pedido.sql
+ └── README.md
+```
