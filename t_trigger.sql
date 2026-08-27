@@ -1,9 +1,8 @@
-USE `lapizzeria_don_piccolo`;
+USE thepizzeria_don_piccolo;
 
---Trigger de actualización automática de stock de ingredientes cuando se realiza un pedido.
 DELIMITER $$
-CREATE TRIGGER `t_actualizar_stock_ingrediente`
-AFTER INSERT ON `detallepedido`
+CREATE TRIGGER t_actualizar_stock_ingrediente
+AFTER INSERT ON detallepedido
 FOR EACH ROW
 BEGIN
   UPDATE ingrediente i
@@ -13,10 +12,9 @@ BEGIN
 END$$
 DELIMITER ;
 
---Trigger de auditoría que registre en una tabla historial_precios cada vez que se modifique el precio de una pizza.
 DELIMITER $$
-CREATE TRIGGER `t_auditoria_precio_pizza`
-BEFORE UPDATE ON `pizza`
+CREATE TRIGGER t_auditoria_precio_pizza
+BEFORE UPDATE ON pizza
 FOR EACH ROW
 BEGIN
   IF NEW.precio_base <> OLD.precio_base THEN
@@ -26,16 +24,41 @@ BEGIN
 END$$
 DELIMITER ;
 
---Trigger para marcar repartidor como “disponible” nuevamente cuando termina un domicilio.
 DELIMITER $$
-CREATE TRIGGER `t_repartidor_disponible`
-AFTER UPDATE ON `domicilio`
+CREATE TRIGGER t_repartidor_disponible
+AFTER UPDATE ON domicilio
 FOR EACH ROW
 BEGIN
   IF NEW.hora_entrega IS NOT NULL AND OLD.hora_entrega IS NULL AND NEW.id_repartidor IS NOT NULL THEN
     UPDATE repartidor
     SET estado = 'disponible'
     WHERE id_persona = NEW.id_repartidor;
+  END IF;
+END$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE TRIGGER t_disponibilidad_ingrediente_insert
+BEFORE INSERT ON ingrediente
+FOR EACH ROW
+BEGIN
+  IF NEW.stock_actual <= 0 THEN
+    SET NEW.disponible = 0;
+  ELSE
+    SET NEW.disponible = 1;
+  END IF;
+END$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE TRIGGER t_disponibilidad_ingrediente_update
+BEFORE UPDATE ON ingrediente
+FOR EACH ROW
+BEGIN
+  IF NEW.stock_actual <= 0 THEN
+    SET NEW.disponible = 0;
+  ELSE
+    SET NEW.disponible = 1;
   END IF;
 END$$
 DELIMITER ;
