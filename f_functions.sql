@@ -1,21 +1,21 @@
-USE `lapizzeria_don_piccolo`;
+USE thepizzeria_don_piccolo;
 
 --Función para calcular el total de un pedido (sumando precios de pizzas + costo de envío + IVA).
 DELIMITER $$
-CREATE FUNCTION `f_calcular_total_pedido`(p_id_pedido INT)
-RETURNS DECIMAL(10,2)
+CREATE FUNCTION f_calcular_total_pedido(p_id_pedido INT)
+RETURNS DOUBLE
 DETERMINISTIC
 READS SQL DATA
 BEGIN
-  DECLARE v_subtotal DECIMAL(10,2) DEFAULT 0;
-  DECLARE v_envio DECIMAL(10,2) DEFAULT 0;
-  DECLARE v_total DECIMAL(10,2) DEFAULT 0;
+  DECLARE v_subtotal DOUBLE DEFAULT 0;
+  DECLARE v_envio DOUBLE DEFAULT 0;
+  DECLARE v_total DOUBLE DEFAULT 0;
 
-  SELECT IFNULL(SUM(cantidad * precio_unitario),0) INTO v_subtotal
+  SELECT IFNULL(SUM(cantidad * precio_unitario), 0) INTO v_subtotal
   FROM detallepedido
   WHERE id_pedido = p_id_pedido;
 
-  SELECT IFNULL(costo_envio,0) INTO v_envio
+  SELECT IFNULL(costo_envio, 0) INTO v_envio
   FROM domicilio
   WHERE id_pedido = p_id_pedido;
 
@@ -25,21 +25,20 @@ BEGIN
 END$$
 DELIMITER ;
 
---Función para calcular la ganancia neta diaria (ventas - costos de ingredientes).
 DELIMITER $$
-CREATE FUNCTION `f_ganancia_neta_diaria`(p_fecha DATE)
-RETURNS DECIMAL(10,2)
+CREATE FUNCTION f_ganancia_neta_diaria(p_fecha DATE)
+RETURNS DOUBLE
 DETERMINISTIC
 READS SQL DATA
 BEGIN
-  DECLARE v_ventas DECIMAL(10,2) DEFAULT 0;
-  DECLARE v_costos DECIMAL(10,2) DEFAULT 0;
+  DECLARE v_ventas DOUBLE DEFAULT 0;
+  DECLARE v_costos DOUBLE DEFAULT 0;
 
-  SELECT IFNULL(SUM(p.total),0) INTO v_ventas
+  SELECT IFNULL(SUM(p.total), 0) INTO v_ventas
   FROM pedido p
   WHERE DATE(p.fecha_hora) = p_fecha AND p.estado = 'entregado';
 
-  SELECT IFNULL(SUM(dp.cantidad * pi.cantidad_necesaria * i.costo_unitario),0) INTO v_costos
+  SELECT IFNULL(SUM(dp.cantidad * pi.cantidad_necesaria * i.costo_unitario), 0) INTO v_costos
   FROM detallepedido dp
   JOIN pedido pd ON dp.id_pedido = pd.id_pedido
   JOIN pizzaingrediente pi ON dp.id_pizza = pi.id_pizza
@@ -50,7 +49,6 @@ BEGIN
 END$$
 DELIMITER ;
 
---Permitir identificar clientes frecuentes (más de 5 pedidos en el mes).
 DELIMITER $$
 CREATE FUNCTION f_es_cliente_frecuente(
     p_id_cliente INT,
@@ -79,6 +77,7 @@ BEGIN
 END$$
 DELIMITER ;
 
-SELECT f_calcular_total_pedido(1);
-SELECT f_ganancia_neta_diaria('2026-08-01');
-SELECT f_es_cliente_frecuente(1, 2026, 1);
+--Prueba con:
+SELECT f_calcular_total_pedido(1) AS total_pedido;
+SELECT f_ganancia_neta_diaria('2026-08-26') AS ganancia_neta;
+SELECT f_es_cliente_frecuente(1, 2026, 8) AS tipo_cliente;
