@@ -45,7 +45,7 @@ SELECT
 FROM ingrediente
 WHERE stock_actual < stock_minimo;
 
---Usarlas con:
+-- Usarlas con:
 SELECT * FROM v_resumen_pedidos_cliente;
 SELECT * FROM v_desempeno_repartidores;
 SELECT * FROM v_stock_bajo;
