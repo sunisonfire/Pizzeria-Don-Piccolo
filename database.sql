@@ -197,7 +197,8 @@ INSERT INTO pedido (id_cliente, fecha_hora, metodo_pago, estado, lugar, subtotal
 (1, '2026-08-15 20:10:00', 'efectivo', 'entregado',      'local',     70000, 83300.00),
 (1, '2026-08-20 12:30:00', 'tarjeta',  'pendiente',      'domicilio', 32000, 44030.00),
 (8, '2026-08-22 20:15:00', 'efectivo', 'pendiente',      'domicilio', 77000, 98770.00),
-(1, '2026-08-25 21:00:00', 'app',      'en_preparacion', 'local',     45000, 53550.00);
+(1, '2026-08-25 21:00:00', 'app',      'en_preparacion', 'local',     45000, 53550.00),
+(1, '2026-08-26 19:00:00', 'tarjeta', 'entregado', 'local', 70000, 83300);
 
 INSERT INTO detallepedido (id_pedido, id_pizza, cantidad, precio_unitario) VALUES
 (1, 1, 2, 32000), (1, 2, 1, 35000),
@@ -209,7 +210,8 @@ INSERT INTO detallepedido (id_pedido, id_pizza, cantidad, precio_unitario) VALUE
 (7, 2, 2, 35000),
 (8, 1, 1, 32000),
 (9, 5, 1, 45000), (9, 1, 1, 32000),
-(10, 5, 1, 45000);
+(10, 5, 1, 45000),
+(11, 2, 2, 35000);
 
 INSERT INTO domicilio (id_pedido, id_repartidor, id_zona, hora_salida, hora_entrega, distancia_km, costo_envio) VALUES
 (1, 4, 1, '2026-08-03 12:15:00', '2026-08-03 12:45:00', 3.2, 5000),
@@ -230,6 +232,7 @@ INSERT INTO pago (id_pedido, metodo, monto, fecha_pago, estado_pago) VALUES
 (8, 'tarjeta',  44030.00,  NULL,                  'pendiente'),
 (9, 'efectivo', 98770.00,  NULL,                  'pendiente'),
 (10, 'app',     53550.00,  NULL,                  'pendiente');
+
 
 -- MOSTRAR TABLAS
 SELECT * FROM persona;
