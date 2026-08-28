@@ -1,6 +1,6 @@
 USE thepizzeria_don_piccolo;
 
---Procedimiento para cambiar automáticamente el estado del pedido a “entregado” cuando se registre la hora de entrega.
+-- Procedimiento para cambiar automáticamente el estado del pedido a “entregado” cuando se registre la hora de entrega.
 DELIMITER $$
 CREATE PROCEDURE p_registrar_entrega(IN p_id_domicilio INT, IN p_hora_entrega DATETIME)
 BEGIN
@@ -20,6 +20,6 @@ BEGIN
 END$$
 DELIMITER ;
 
---Probar con:
+-- Probar con:
 CALL p_registrar_entrega(1, '2026-08-25 14:30:00');
 
