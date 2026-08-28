@@ -1,7 +1,5 @@
 DROP DATABASE IF EXISTS `thepizzeria_don_piccolo`;
 CREATE DATABASE `thepizzeria_don_piccolo` 
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
 
 USE thepizzeria_don_piccolo;
 
@@ -142,7 +140,7 @@ CREATE TABLE historial_precios (
   INDEX idx_historial_pizza (id_pizza)
 ) ENGINE=InnoDB;
 
---Datitos de insert:
+-- Datitos de insert:
 INSERT INTO zona (nombre) VALUES
 ('Norte'),
 ('Centro'),
@@ -233,7 +231,7 @@ INSERT INTO pago (id_pedido, metodo, monto, fecha_pago, estado_pago) VALUES
 (9, 'efectivo', 98770.00,  NULL,                  'pendiente'),
 (10, 'app',     53550.00,  NULL,                  'pendiente');
 
---MOSTRAR TABLAS
+-- MOSTRAR TABLAS
 SELECT * FROM persona;
 SELECT * FROM zona;
 SELECT * FROM cliente;
