@@ -106,3 +106,6 @@ Ejecutar los archivos **en este orden** desde un cliente MySQL:
  ├── mejoras_registro_pedido.sql
  └── README.md
 ```
+
+<img width="1819" height="1992" alt="image" src="https://github.com/user-attachments/assets/ed240806-f0e1-4885-9f9d-e68b7221b01b" />
+
