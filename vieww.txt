@@ -1,0 +1,38 @@
+CREATE VIEW v_pizzas_mas_vendidas AS
+SELECT
+    pz.id_pizza,
+    pz.nombre AS nombre_pizza,
+    pz.tipo,
+    pz.tamano,
+    IFNULL(SUM(dp.cantidad), 0) AS unidades_vendidas,
+    IFNULL(SUM(dp.cantidad * dp.precio_unitario), 0) AS ingresos_generados
+FROM pizza pz
+LEFT JOIN detallepedido dp ON pz.id_pizza = dp.id_pizza
+LEFT JOIN pedido pe ON dp.id_pedido = pe.id_pedido AND pe.estado <> 'cancelado'
+GROUP BY pz.id_pizza, nombre_pizza, pz.tipo, pz.tamano
+ORDER BY unidades_vendidas DESC;
+
+SELECT * FROM v_pizzas_mas_vendidas;
+
+CREATE VIEW v_costo_reposicion_stock_bajo AS
+SELECT
+    id_ingrediente,
+    nombre,
+    stock_actual,
+    stock_minimo,
+    (stock_minimo - stock_actual) AS cantidad_a_reponer,
+    costo_unitario,
+    ROUND((stock_minimo - stock_actual) * costo_unitario, 2) AS costo_total_reposicion
+FROM ingrediente
+WHERE stock_actual < stock_minimo
+ORDER BY costo_total_reposicion DESC;
+
+SELECT * FROM v_costo_reposicion_stock_bajo;
+
+-- Ver el top 3 de pizzas más vendidas
+SELECT * FROM v_pizzas_mas_vendidas LIMIT 3;
+
+-- Ver cuánto costaría reabastecer todo lo que está bajo el mínimo
+SELECT SUM(costo_total_reposicion) AS costo_total_para_reabastecer
+FROM v_costo_reposicion_stock_bajo;
+

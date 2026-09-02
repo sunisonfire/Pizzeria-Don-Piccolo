@@ -1,0 +1,98 @@
+-- ==============================================================
+-- Procedimiento: crear un pedido completo (encabezado + detalles + domicilio opcional)
+-- ==============================================================
+DROP PROCEDURE IF EXISTS p_crear_pedido_completo;
+DELIMITER $$
+CREATE PROCEDURE p_crear_pedido_completo(
+    IN p_id_cliente     INT,
+    IN p_metodo_pago    VARCHAR(20),
+    IN p_lugar          VARCHAR(20),     -- 'local' o 'domicilio'
+    IN p_detalle_json   JSON,            -- ej: '[{"id_pizza":1,"cantidad":2},{"id_pizza":2,"cantidad":1}]'
+    IN p_id_zona        INT,             -- NULL si es 'local'
+    IN p_costo_envio    DOUBLE           -- NULL o 0 si es 'local'
+)
+BEGIN
+    DECLARE v_id_pedido INT;
+    DECLARE v_error_msg VARCHAR(255) DEFAULT '';
+
+    -- si algo falla en cualquier punto, se revierte todo
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 v_error_msg = MESSAGE_TEXT;
+        ROLLBACK;
+        RESIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_error_msg;
+    END;
+
+    START TRANSACTION;
+
+        -- 1. Crear el encabezado del pedido (subtotal/total en 0, los triggers los calculan)
+        INSERT INTO pedido (id_cliente, metodo_pago, estado, lugar, subtotal, total)
+        VALUES (p_id_cliente, p_metodo_pago, 'pendiente', p_lugar, 0, 0);
+
+        SET v_id_pedido = LAST_INSERT_ID();
+
+        -- 2. Insertar cada pizza del JSON en detallepedido
+        --    (el trigger t_verificar_stock_pizza valida stock antes de cada insert,
+        --     y t_actualizar_stock_ingrediente + t_recalcular_total_insert se disparan solos)
+        INSERT INTO detallepedido (id_pedido, id_pizza, cantidad, precio_unitario)
+        SELECT
+            v_id_pedido,
+            jt.id_pizza,
+            jt.cantidad,
+            pz.precio_base
+        FROM JSON_TABLE(
+            p_detalle_json,
+            '$[*]' COLUMNS (
+                id_pizza INT PATH '$.id_pizza',
+                cantidad INT PATH '$.cantidad'
+            )
+        ) AS jt
+        JOIN pizza pz ON pz.id_pizza = jt.id_pizza;
+
+        -- 3. Si el pedido es a domicilio, crear el registro de domicilio
+        IF p_lugar = 'domicilio' THEN
+            INSERT INTO domicilio (id_pedido, id_zona, costo_envio)
+            VALUES (v_id_pedido, p_id_zona, IFNULL(p_costo_envio, 0));
+
+            -- el total ya tiene el subtotal, pero falta sumarle el envío -> recalculamos
+            CALL p_recalcular_pedido(v_id_pedido);
+        END IF;
+
+    COMMIT;
+
+    -- devolver el pedido creado, ya con subtotal y total calculados
+    SELECT * FROM pedido WHERE id_pedido = v_id_pedido;
+
+END$$
+DELIMITER ;
+
+-- Pedido a domicilio: cliente 2, con 2 Margaritas y 1 Hawaiana
+CALL p_crear_pedido_completo(
+    2,
+    'tarjeta',
+    'domicilio',
+    '[{"id_pizza":1,"cantidad":2},{"id_pizza":3,"cantidad":1}]',
+    1,
+    5000
+);
+
+-- Pedido local sin envío: cliente 3, con 1 Cuatro Quesos
+CALL p_crear_pedido_completo(
+    3,
+    'efectivo',
+    'local',
+    '[{"id_pizza":5,"cantidad":1}]',
+    NULL,
+    NULL
+);
+
+-- Probar que falla si no hay stock suficiente (ejemplo: pedir 100 Vegetarianas)
+CALL p_crear_pedido_completo(
+    1,
+    'app',
+    'local',
+    '[{"id_pizza":4,"cantidad":100}]',
+    NULL,
+    NULL
+);
+-- Debe hacer ROLLBACK y no dejar ningún registro a medias

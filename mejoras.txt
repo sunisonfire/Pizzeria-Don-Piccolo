@@ -1,0 +1,298 @@
+
+-- ==============================================================
+-- SECCIÓN 1: AJUSTE DE ESTRUCTURA (va justo después de los CREATE TABLE,
+-- antes de los INSERT, o después de los INSERT si la tabla ya tiene datos
+-- y solo se está migrando la PK)
+-- ==============================================================
+
+-- Reemplaza la PK compuesta de pizzaingrediente por un id propio,
+-- manteniendo la combinación pizza+ingrediente como UNIQUE
+ALTER TABLE pizzaingrediente
+  DROP PRIMARY KEY,
+  ADD COLUMN id_receta INT AUTO_INCREMENT PRIMARY KEY FIRST,
+  ADD CONSTRAINT uq_pizza_ingrediente UNIQUE (id_pizza, id_ingrediente);
+
+
+-- ==============================================================
+-- SECCIÓN 2: PROCEDIMIENTOS AUXILIARES
+-- (van ANTES que los triggers, porque los triggers los llaman con CALL)
+-- ==============================================================
+
+-- ------------------------------------------------------------
+-- Recalcula subtotal y total de un pedido (subtotal detalles + envío, con IVA)
+-- ------------------------------------------------------------
+DROP PROCEDURE IF EXISTS p_recalcular_pedido;
+DELIMITER $$
+CREATE PROCEDURE p_recalcular_pedido(IN p_id_pedido INT)
+BEGIN
+  DECLARE v_subtotal DOUBLE DEFAULT 0;
+  DECLARE v_envio DOUBLE DEFAULT 0;
+
+  SELECT IFNULL(SUM(cantidad * precio_unitario), 0) INTO v_subtotal
+  FROM detallepedido
+  WHERE id_pedido = p_id_pedido;
+
+  SELECT IFNULL(costo_envio, 0) INTO v_envio
+  FROM domicilio
+  WHERE id_pedido = p_id_pedido;
+
+  UPDATE pedido
+  SET subtotal = v_subtotal,
+      total = ROUND((v_subtotal + v_envio) * 1.19, 2)
+  WHERE id_pedido = p_id_pedido;
+END$$
+DELIMITER ;
+
+-- ------------------------------------------------------------
+-- Ajusta el stock de ingredientes según diferencia de cantidad de pizza
+-- (positiva = descuenta, negativa = devuelve)
+-- ------------------------------------------------------------
+DROP PROCEDURE IF EXISTS p_ajustar_stock_pizza;
+DELIMITER $$
+CREATE PROCEDURE p_ajustar_stock_pizza(IN p_id_pizza INT, IN p_diferencia_cantidad INT)
+BEGIN
+  UPDATE ingrediente i
+  JOIN pizzaingrediente pi ON i.id_ingrediente = pi.id_ingrediente
+  SET i.stock_actual = i.stock_actual - (pi.cantidad_necesaria * p_diferencia_cantidad)
+  WHERE pi.id_pizza = p_id_pizza;
+END$$
+DELIMITER ;
+
+
+-- ==============================================================
+-- SECCIÓN 3: TRIGGERS SOBRE detallepedido
+-- (recalculo de subtotal/total + manejo de stock)
+-- ==============================================================
+
+-- --- Recalculo de subtotal/total ---
+DROP TRIGGER IF EXISTS t_recalcular_total_insert;
+DELIMITER $$
+CREATE TRIGGER t_recalcular_total_insert
+AFTER INSERT ON detallepedido
+FOR EACH ROW
+BEGIN
+  CALL p_recalcular_pedido(NEW.id_pedido);
+END$$
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS t_recalcular_total_update;
+DELIMITER $$
+CREATE TRIGGER t_recalcular_total_update
+AFTER UPDATE ON detallepedido
+FOR EACH ROW
+BEGIN
+  CALL p_recalcular_pedido(NEW.id_pedido);
+END$$
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS t_recalcular_total_delete;
+DELIMITER $$
+CREATE TRIGGER t_recalcular_total_delete
+AFTER DELETE ON detallepedido
+FOR EACH ROW
+BEGIN
+  CALL p_recalcular_pedido(OLD.id_pedido);
+END$$
+DELIMITER ;
+
+-- --- Manejo de stock (INSERT / UPDATE / DELETE) ---
+DROP TRIGGER IF EXISTS t_actualizar_stock_ingrediente;
+DELIMITER $$
+CREATE TRIGGER t_actualizar_stock_ingrediente
+AFTER INSERT ON detallepedido
+FOR EACH ROW
+BEGIN
+  CALL p_ajustar_stock_pizza(NEW.id_pizza, NEW.cantidad);
+END$$
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS t_actualizar_stock_update;
+DELIMITER $$
+CREATE TRIGGER t_actualizar_stock_update
+AFTER UPDATE ON detallepedido
+FOR EACH ROW
+BEGIN
+  IF OLD.id_pizza <> NEW.id_pizza THEN
+    CALL p_ajustar_stock_pizza(OLD.id_pizza, -OLD.cantidad);
+    CALL p_ajustar_stock_pizza(NEW.id_pizza, NEW.cantidad);
+  ELSE
+    CALL p_ajustar_stock_pizza(NEW.id_pizza, NEW.cantidad - OLD.cantidad);
+  END IF;
+END$$
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS t_actualizar_stock_delete;
+DELIMITER $$
+CREATE TRIGGER t_actualizar_stock_delete
+AFTER DELETE ON detallepedido
+FOR EACH ROW
+BEGIN
+  CALL p_ajustar_stock_pizza(OLD.id_pizza, -OLD.cantidad);
+END$$
+DELIMITER ;
+
+
+-- ==============================================================
+-- SECCIÓN 4: TRIGGERS SOBRE domicilio
+-- (validaciones BEFORE + estado del repartidor/pedido AFTER)
+-- ==============================================================
+
+-- --- Validaciones antes de insertar/actualizar ---
+DROP TRIGGER IF EXISTS t_verificar_repartidor_disponible;
+DELIMITER $$
+CREATE TRIGGER t_verificar_repartidor_disponible
+BEFORE INSERT ON domicilio
+FOR EACH ROW
+BEGIN
+  DECLARE v_estado VARCHAR(20);
+
+  IF NEW.id_repartidor IS NOT NULL THEN
+    SELECT estado INTO v_estado
+    FROM repartidor
+    WHERE id_persona = NEW.id_repartidor;
+
+    IF v_estado = 'no_disponible' THEN
+      SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'El repartidor seleccionado no está disponible';
+    END IF;
+  END IF;
+END$$
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS t_verificar_repartidor_disponible_update;
+DELIMITER $$
+CREATE TRIGGER t_verificar_repartidor_disponible_update
+BEFORE UPDATE ON domicilio
+FOR EACH ROW
+BEGIN
+  DECLARE v_estado VARCHAR(20);
+
+  IF NEW.id_repartidor IS NOT NULL
+     AND (OLD.id_repartidor IS NULL OR OLD.id_repartidor <> NEW.id_repartidor) THEN
+    SELECT estado INTO v_estado
+    FROM repartidor
+    WHERE id_persona = NEW.id_repartidor;
+
+    IF v_estado = 'no_disponible' THEN
+      SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'El repartidor seleccionado no está disponible';
+    END IF;
+  END IF;
+END$$
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS t_validar_hora_entrega;
+DELIMITER $$
+CREATE TRIGGER t_validar_hora_entrega
+BEFORE UPDATE ON domicilio
+FOR EACH ROW
+BEGIN
+  IF NEW.hora_entrega IS NOT NULL AND NEW.hora_salida IS NULL THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'No se puede registrar hora_entrega sin hora_salida previa';
+  END IF;
+
+  IF NEW.hora_entrega IS NOT NULL AND NEW.hora_salida IS NOT NULL
+     AND NEW.hora_entrega < NEW.hora_salida THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'La hora de entrega no puede ser anterior a la hora de salida';
+  END IF;
+END$$
+DELIMITER ;
+
+-- --- Estado del repartidor y del pedido ---
+
+-- Se ocupa al crear el domicilio (INSERT ya con repartidor asignado)
+DROP TRIGGER IF EXISTS t_repartidor_ocupado;
+DELIMITER $$
+CREATE TRIGGER t_repartidor_ocupado
+AFTER INSERT ON domicilio
+FOR EACH ROW
+BEGIN
+  IF NEW.id_repartidor IS NOT NULL THEN
+    UPDATE repartidor
+    SET estado = 'no_disponible'
+    WHERE id_persona = NEW.id_repartidor;
+  END IF;
+END$$
+DELIMITER ;
+
+-- Trigger único y consolidado para AFTER UPDATE ON domicilio
+-- (reemplaza t_repartidor_disponible, trg_domicilio_marcar_entregado
+--  y t_repartidor_ocupado_update, que quedan obsoletos)
+DROP TRIGGER IF EXISTS t_repartidor_disponible;
+DROP TRIGGER IF EXISTS trg_domicilio_marcar_entregado;
+DROP TRIGGER IF EXISTS t_repartidor_ocupado_update;
+DROP TRIGGER IF EXISTS t_domicilio_after_update;
+DELIMITER $$
+CREATE TRIGGER t_domicilio_after_update
+AFTER UPDATE ON domicilio
+FOR EACH ROW
+BEGIN
+  -- caso 1: se asigna repartidor nuevo (antes NULL o distinto) -> queda ocupado
+  IF NEW.id_repartidor IS NOT NULL
+     AND (OLD.id_repartidor IS NULL OR OLD.id_repartidor <> NEW.id_repartidor) THEN
+    UPDATE repartidor
+    SET estado = 'no_disponible'
+    WHERE id_persona = NEW.id_repartidor;
+  END IF;
+
+  -- caso 2: se registra hora de entrega -> pedido entregado + repartidor disponible
+  IF NEW.hora_entrega IS NOT NULL
+     AND (OLD.hora_entrega IS NULL OR OLD.hora_entrega <> NEW.hora_entrega) THEN
+    UPDATE pedido
+    SET estado = 'entregado'
+    WHERE id_pedido = NEW.id_pedido;
+
+    IF NEW.id_repartidor IS NOT NULL THEN
+      UPDATE repartidor
+      SET estado = 'disponible'
+      WHERE id_persona = NEW.id_repartidor;
+    END IF;
+  END IF;
+END$$
+DELIMITER ;
+
+
+-- ==============================================================
+-- SECCIÓN 5: PROCEDIMIENTOS PRINCIPALES
+-- (van después de los triggers, porque dependen de que estos
+--  ya estén activos para funcionar correctamente)
+-- ==============================================================
+
+DROP PROCEDURE IF EXISTS p_cancelar_pedido;
+DELIMITER $$
+CREATE PROCEDURE p_cancelar_pedido(IN p_id_pedido INT)
+BEGIN
+  DECLARE v_estado_actual VARCHAR(20);
+
+  SELECT estado INTO v_estado_actual
+  FROM pedido
+  WHERE id_pedido = p_id_pedido;
+
+  IF v_estado_actual = 'entregado' THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'No se puede cancelar un pedido ya entregado';
+  ELSEIF v_estado_actual = 'cancelado' THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'El pedido ya está cancelado';
+  ELSE
+    DELETE FROM detallepedido WHERE id_pedido = p_id_pedido;
+
+    UPDATE pedido
+    SET estado = 'cancelado'
+    WHERE id_pedido = p_id_pedido;
+  END IF;
+END$$
+DELIMITER ;
+
+
+-- ==============================================================
+-- SECCIÓN 6: PRUEBAS
+-- ==============================================================
+
+CALL p_cancelar_pedido(10);
+SELECT * FROM pedido WHERE id_pedido = 10;
+SELECT * FROM ingrediente; -- verifica que el stock volvió a subir
+
+
